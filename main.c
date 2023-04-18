@@ -2,7 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-// 定义空闲块结构体
+#define FREE_BLOCK_SIZE sizeof(FreeBlock)
+#define ALLOC_BLOCK_SIZE sizeof(AllocBlock)
+#define JOB_SIZE sizeof(Job)
+
 typedef struct FreeBlock
 {
     int size;
@@ -10,19 +13,33 @@ typedef struct FreeBlock
     struct FreeBlock *next;
 } FreeBlock;
 
-// 初始化空闲块链表
-void initFreeTable(FreeBlock **head, int size)
+typedef struct AllocBlock
 {
-    *head = (FreeBlock *)malloc(sizeof(FreeBlock));
+    int size;
+    int addr;
+} AllocBlock;
+
+typedef struct Job
+{
+    char name[20];
+    int size;
+} Job;
+
+const int MAX_FREE_BLOCKS = 1000;
+const int MAX_ALLOC_BLOCKS = 1000;
+const int MAX_JOBS = 1000;
+
+void init_free_table(FreeBlock **head, int size)
+{
+    *head = malloc(FREE_BLOCK_SIZE);
     (*head)->size = size;
     (*head)->addr = 0;
     (*head)->next = NULL;
 }
 
-// 插入空闲块到空闲块链表
-void insertFreeBlock(FreeBlock **head, int size, int addr)
+void insert_free_block(FreeBlock **head, int size, int addr)
 {
-    FreeBlock *block = (FreeBlock *)malloc(sizeof(FreeBlock));
+    FreeBlock *block = malloc(FREE_BLOCK_SIZE);
     block->size = size;
     block->addr = addr;
     block->next = NULL;
@@ -42,8 +59,7 @@ void insertFreeBlock(FreeBlock **head, int size, int addr)
     }
 }
 
-// 从空闲块链表中删除一个空闲块
-void deleteFreeBlock(FreeBlock **head, FreeBlock *block)
+void delete_free_block(FreeBlock **head, FreeBlock *block)
 {
     if (*head == block)
     {
@@ -64,8 +80,7 @@ void deleteFreeBlock(FreeBlock **head, FreeBlock *block)
     free(block);
 }
 
-// 分配内存空间
-int allocateMemory(FreeBlock **head, int size)
+int allocate_memory(FreeBlock **head, int size)
 {
     if (*head == NULL)
     {
@@ -81,7 +96,7 @@ int allocateMemory(FreeBlock **head, int size)
             cur->addr += size;
             if (cur->size == 0)
             {
-                deleteFreeBlock(head, cur);
+                delete_free_block(head, cur);
             }
             return addr;
         }
@@ -90,16 +105,14 @@ int allocateMemory(FreeBlock **head, int size)
     return -1;
 }
 
-// 回收内存空间
-void freeMemory(FreeBlock **head, int addr, int size)
+void free_memory(FreeBlock **head, int addr, int size)
 {
-    insertFreeBlock(head, size, addr);
+    insert_free_block(head, size, addr);
 }
 
-// 打印空闲块链表
-void printFreeTable(FreeBlock *head)
+void print_free_table(FreeBlock *head)
 {
-    printf("空闲区表：\n");
+    printf("Free Block Table:\n");
     printf("---------------------------\n");
     printf("| addr      | size      |\n");
     printf("---------------------------\n");
@@ -112,26 +125,12 @@ void printFreeTable(FreeBlock *head)
     printf("---------------------------\n");
 }
 
-// 定义已分配块结构体
-typedef struct AllocBlock
+void init_alloc_table(AllocBlock *table, int size)
 {
-    int size;
-    int addr;
-} AllocBlock;
-
-// 初始化已分配块数组
-void initAllocTable(AllocBlock *table, int size)
-{
-    int i;
-    for (i = 0; i < size; i++)
-    {
-        table[i].size = -1;
-        table[i].addr = -1;
-    }
+    memset(table, -1, size * ALLOC_BLOCK_SIZE);
 }
 
-// 查找空闲的已分配块位置
-int findFreeAllocBlock(AllocBlock *table, int size)
+int find_free_alloc_block(AllocBlock *table, int size)
 {
     int i;
     for (i = 0; i < size; i++)
@@ -144,24 +143,21 @@ int findFreeAllocBlock(AllocBlock *table, int size)
     return -1;
 }
 
-// 插入已分配块到已分配块数组
-void insertAllocBlock(AllocBlock *table, int size, int addr, int index)
+void insert_alloc_block(AllocBlock *table, int size, int addr, int index)
 {
     table[index].size = size;
     table[index].addr = addr;
 }
 
-// 从已分配块数组中删除一个已分配块
-void deleteAllocBlock(AllocBlock *table, int index)
+void delete_alloc_block(AllocBlock *table, int index)
 {
     table[index].size = -1;
     table[index].addr = -1;
 }
 
-// 打印已分配块数组
-void printAllocTable(AllocBlock *table, int size)
+void print_alloc_table(AllocBlock *table, int size)
 {
-    printf("已分配区表：\n");
+    printf("Allocated Block Table:\n");
     printf("---------------------------\n");
     printf("| index | addr      | size  |\n");
     printf("---------------------------\n");
@@ -176,31 +172,17 @@ void printAllocTable(AllocBlock *table, int size)
     printf("---------------------------\n");
 }
 
-// 定义作业结构体
-typedef struct Job
+void init_job_queue(Job *queue, int size)
 {
-    char name[20];
-    int size;
-} Job;
-
-// 初始化作业队列
-void initJobQueue(Job *queue, int size)
-{
-    int i;
-    for (i = 0; i < size; i++)
-    {
-        queue[i].name[0] = '\0';
-        queue[i].size = -1;
-    }
+    memset(queue, 0, size * JOB_SIZE);
 }
 
-// 查找空闲的作业队列位置
-int findFreeJobQueue(Job *queue, int size)
+int find_free_job_queue(Job *queue, int size)
 {
     int i;
     for (i = 0; i < size; i++)
     {
-        if (queue[i].size == -1)
+        if (strlen(queue[i].name) == 0)
         {
             return i;
         }
@@ -208,31 +190,27 @@ int findFreeJobQueue(Job *queue, int size)
     return -1;
 }
 
-// 插入作业到作业队列
-void insertJob(Job *queue, int size, char *name, int jobSize, int index)
+void insert_job(Job *queue, int size, char *name, int job_size, int index)
 {
     strncpy(queue[index].name, name, 20);
-    queue[index].size = jobSize;
+    queue[index].size = job_size;
 }
 
-// 从作业队列中删除一个作业
-void deleteJob(Job *queue, int index)
+void delete_job(Job *queue, int index)
 {
-    queue[index].name[0] = '\0';
-    queue[index].size = -1;
+    memset(&queue[index], 0, JOB_SIZE);
 }
 
-// 打印作业队列
-void printJobQueue(Job *queue, int size)
+void print_job_queue(Job *queue, int size)
 {
-    printf("作业队列：\n");
+    printf("Job Queue:\n");
     printf("-----------------------\n");
     printf("| index | name     | size |\n");
     printf("-----------------------\n");
     int i;
     for (i = 0; i < size; i++)
     {
-        if (queue[i].size != -1)
+        if (strlen(queue[i].name) != 0)
         {
             printf("| %5d | %8s | %4d |\n", i, queue[i].name, queue[i].size);
         }
@@ -242,49 +220,66 @@ void printJobQueue(Job *queue, int size)
 
 int main()
 {
-    // 初始化空闲块链表
-    FreeBlock *head = NULL;
-    initFreeTable(&head, 100);
-    // 插入空闲块到空闲块链表中
-    insertFreeBlock(&head, 30, 150);
-    insertFreeBlock(&head, 50, 250);
-    insertFreeBlock(&head, 20, 400);
-    // 分配内存
-    int addr1 = allocateMemory(&head, 40);
-    int addr2 = allocateMemory(&head, 25);
-    // 回收内存
-    freeMemory(&head, addr1, 40);
-    // 打印空闲块链表
-    printFreeTable(head);
+    FreeBlock *free_head = NULL;
+    AllocBlock alloc_table[MAX_ALLOC_BLOCKS];
+    Job job_queue[MAX_JOBS];
+    int i;
 
-    // 初始化已分配块数组
-    int size = 10;
-    AllocBlock *table = (AllocBlock *)malloc(size * sizeof(AllocBlock));
-    initAllocTable(table, size);
-    // 插入已分配块到已分配块数组中
-    int index1 = findFreeAllocBlock(table, size);
-    insertAllocBlock(table, 30, 100, index1);
-    int index2 = findFreeAllocBlock(table, size);
-    insertAllocBlock(table, 50, 200, index2);
-    // 删除已分配块
-    deleteAllocBlock(table, index1);
-    // 打印已分配块数组
-    printAllocTable(table, size);
+    init_free_table(&free_head, 1000);
+    init_alloc_table(alloc_table, MAX_ALLOC_BLOCKS);
+    init_job_queue(job_queue, MAX_JOBS);
 
+    printf("Memory Allocation Simulation\n\n");
 
+    insert_free_block(&free_head, 500, 2000);
+    insert_free_block(&free_head, 300, 4000);
+    insert_free_block(&free_head, 200, 7000);
+    insert_free_block(&free_head, 150, 9000);
 
-    // 初始化作业队列
-    int size = 10;
-    Job *queue = (Job*)malloc(size * sizeof(Job));
-    initJobQueue(queue, size);
-    // 插入作业到作业队列中
-    int index1 = findFreeJobQueue(queue, size);
-    insertJob(queue, size, "job1", 30, index1);
-    int index2 = findFreeJobQueue(queue, size);
-    insertJob(queue, size, "job2", 50, index2);
-    // 删除作业
-    deleteJob(queue, index1);
-    // 打印作业队列
-    printJobQueue(queue, size);
+    print_free_table(free_head);
+    print_alloc_table(alloc_table, MAX_ALLOC_BLOCKS);
+    print_job_queue(job_queue, MAX_JOBS);
+
+    int addr1 = allocate_memory(&free_head, 400);
+    printf("allocate_memory(&free_head, 400) returns: %d\n", addr1);
+    if (addr1 != -1)
+    {
+        insert_alloc_block(alloc_table, 400, addr1, find_free_alloc_block(alloc_table, MAX_ALLOC_BLOCKS));
+    }
+
+    int addr2 = allocate_memory(&free_head, 200);
+    printf("allocate_memory(&free_head, 200) returns: %d\n", addr2);
+    if (addr2 != -1)
+    {
+        insert_alloc_block(alloc_table, 200, addr2, find_free_alloc_block(alloc_table, MAX_ALLOC_BLOCKS));
+    }
+
+    int addr3 = allocate_memory(&free_head, 1000);
+    printf("allocate_memory(&free_head, 1000) returns: %d\n", addr3);
+    if (addr3 != -1)
+    {
+        insert_alloc_block(alloc_table, 1000, addr3, find_free_alloc_block(alloc_table, MAX_ALLOC_BLOCKS));
+    }
+
+    print_free_table(free_head);
+    print_alloc_table(alloc_table, MAX_ALLOC_BLOCKS);
+
+    insert_job(job_queue, MAX_JOBS, "job1", 300, find_free_job_queue(job_queue, MAX_JOBS));
+    insert_job(job_queue, MAX_JOBS, "job2", 800, find_free_job_queue(job_queue, MAX_JOBS));
+
+    print_job_queue(job_queue, MAX_JOBS);
+
+    delete_job(job_queue, 1);
+
+    printf("After deleting job 1:\n");
+    print_job_queue(job_queue, MAX_JOBS);
+
+    free_memory(&free_head, addr1, 400);
+    delete_alloc_block(alloc_table, 0);
+
+    printf("After freeing memory and deleting alloc block:\n");
+    print_free_table(free_head);
+    print_alloc_table(alloc_table, MAX_ALLOC_BLOCKS);
+
     return 0;
 }
